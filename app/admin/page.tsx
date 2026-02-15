@@ -1,6 +1,29 @@
 import Link from "next/link";
+import { ProjectRepository } from "@/lib/project-management/repositories/ProjectRepository";
+import { supabaseAdmin } from "@/lib/supabase";
 
-export default function AdminPage() {
+async function getProjectStats() {
+  if (!supabaseAdmin) {
+    return { total: 0, active: 0 };
+  }
+  try {
+    const repository = new ProjectRepository(supabaseAdmin);
+    const [allResult, activeResult] = await Promise.all([
+      repository.findAll({ page: 1, limit: 1 }),
+      repository.findAll({ status: "active", page: 1, limit: 1 }),
+    ]);
+    return {
+      total: allResult.pagination.total,
+      active: activeResult.pagination.total,
+    };
+  } catch {
+    return { total: 0, active: 0 };
+  }
+}
+
+export default async function AdminPage() {
+  const projectStats = await getProjectStats();
+
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white shadow-sm sticky top-0 z-10">
@@ -39,6 +62,16 @@ export default function AdminPage() {
             </Link>
 
             <Link 
+              href="/admin/projects"
+              className="block p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              <h3 className="font-medium text-gray-800">Project Management</h3>
+              <p className="text-sm text-gray-500 mt-1">
+                Manage projects, areas, and teams
+              </p>
+            </Link>
+
+            <Link 
               href="/admin/llm"
               className="block p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
             >
@@ -53,13 +86,21 @@ export default function AdminPage() {
         {/* Statistics */}
         <div className="bg-white rounded-lg shadow-sm p-6">
           <h2 className="text-lg font-semibold text-gray-800 mb-4">Statistics</h2>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="p-4 bg-blue-50 rounded-lg">
-              <div className="text-2xl font-bold text-blue-600">0</div>
-              <div className="text-sm text-gray-600">Total Measurements</div>
+              <div className="text-2xl font-bold text-blue-600">{projectStats.total}</div>
+              <div className="text-sm text-gray-600">Total Projects</div>
             </div>
             <div className="p-4 bg-green-50 rounded-lg">
-              <div className="text-2xl font-bold text-green-600">$0</div>
+              <div className="text-2xl font-bold text-green-600">{projectStats.active}</div>
+              <div className="text-sm text-gray-600">Active Projects</div>
+            </div>
+            <div className="p-4 bg-slate-50 rounded-lg">
+              <div className="text-2xl font-bold text-slate-600">0</div>
+              <div className="text-sm text-gray-600">Total Measurements</div>
+            </div>
+            <div className="p-4 bg-amber-50 rounded-lg">
+              <div className="text-2xl font-bold text-amber-600">$0</div>
               <div className="text-sm text-gray-600">Total Billed</div>
             </div>
           </div>
