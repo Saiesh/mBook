@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { ProjectRepository } from "@/lib/project-management/repositories/ProjectRepository";
 import { supabaseAdmin } from "@/lib/supabase";
@@ -28,39 +29,45 @@ export default async function AdminPage() {
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white shadow-sm sticky top-0 z-10">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <Link href="/" className="text-green-600 hover:text-green-700">
-            ← Back
-          </Link>
+          {/* Why: favicon mirrors the same home-anchor pattern used on /measurements, keeping navigation consistent across the two primary sections. */}
+          <div className="flex items-center gap-2">
+            <Link href="/" aria-label="Go to landing page" className="rounded-md transition-opacity hover:opacity-75">
+              <Image
+                src="/favicon-32x32.png"
+                alt="mBook home"
+                width={28}
+                height={28}
+                className="rounded-md"
+                priority
+              />
+            </Link>
+            {/* Why: direct link to /measurements lets admins jump to the field-capture section without navigating via the landing page. */}
+            <Link
+              href="/measurements"
+              aria-label="Go to measurements"
+              className="rounded-md p-1 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700"
+              title="Measurements"
+            >
+              {/* Ruler icon — semantically maps to measurement/capture activity */}
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M21.3 8.7 8.7 21.3c-.6.6-1.5.6-2.1 0l-6-6a1.5 1.5 0 0 1 0-2.1L13.3 2.7a1.5 1.5 0 0 1 2.1 0l6 6a1.5 1.5 0 0 1-.1 2z" />
+                <path d="m7.5 10.5 2 2" />
+                <path d="m10.5 7.5 2 2" />
+                <path d="m13.5 4.5 2 2" />
+                <path d="m4.5 13.5 2 2" />
+              </svg>
+            </Link>
+          </div>
           <h1 className="text-xl font-semibold text-gray-800">Admin Panel</h1>
           <div className="w-16"></div>
         </div>
       </header>
 
       <div className="container mx-auto px-4 py-6 space-y-4">
-        {/* Configuration Cards */}
+        {/* Configuration Cards — only surfacing sections with live functionality */}
         <div className="bg-white rounded-lg shadow-sm p-6">
           <h2 className="text-lg font-semibold text-gray-800 mb-4">Configuration</h2>
           <div className="space-y-3">
-            <Link 
-              href="/admin/pricing"
-              className="block p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-            >
-              <h3 className="font-medium text-gray-800">Pricing Settings</h3>
-              <p className="text-sm text-gray-500 mt-1">
-                Configure rates and billing rules
-              </p>
-            </Link>
-            
-            <Link 
-              href="/admin/users"
-              className="block p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-            >
-              <h3 className="font-medium text-gray-800">User Management</h3>
-              <p className="text-sm text-gray-500 mt-1">
-                Manage team members and permissions
-              </p>
-            </Link>
-
             <Link 
               href="/admin/projects"
               className="block p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
@@ -68,16 +75,6 @@ export default async function AdminPage() {
               <h3 className="font-medium text-gray-800">Project Management</h3>
               <p className="text-sm text-gray-500 mt-1">
                 Manage projects, areas, and teams
-              </p>
-            </Link>
-
-            <Link 
-              href="/admin/llm"
-              className="block p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-            >
-              <h3 className="font-medium text-gray-800">LLM Settings</h3>
-              <p className="text-sm text-gray-500 mt-1">
-                Configure AI integration and features
               </p>
             </Link>
           </div>
@@ -100,7 +97,8 @@ export default async function AdminPage() {
               <div className="text-sm text-gray-600">Total Measurements</div>
             </div>
             <div className="p-4 bg-amber-50 rounded-lg">
-              <div className="text-2xl font-bold text-amber-600">$0</div>
+              {/* Use ₹ symbol to match the app-wide INR currency standard */}
+              <div className="text-2xl font-bold text-amber-600">₹0</div>
               <div className="text-sm text-gray-600">Total Billed</div>
             </div>
           </div>

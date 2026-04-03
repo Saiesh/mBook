@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
@@ -115,9 +116,33 @@ function MeasurementsPageContent() {
     <div className="min-h-screen bg-gray-50">
       <header className="sticky top-0 z-10 border-b border-gray-100 bg-white">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-4">
-          <Link href="/" className="text-sm font-medium text-green-700 hover:text-green-800">
-            ← Home
-          </Link>
+          {/* Why: favicon acts as a persistent home anchor, and the admin icon gives quick access to the admin panel without a back stack. */}
+          <div className="flex items-center gap-2">
+            <Link href="/" aria-label="Go to landing page" className="rounded-md transition-opacity hover:opacity-75">
+              <Image
+                src="/favicon-32x32.png"
+                alt="mBook home"
+                width={28}
+                height={28}
+                className="rounded-md"
+                priority
+              />
+            </Link>
+            <Link
+              href="/admin"
+              aria-label="Go to admin panel"
+              className="rounded-md p-1 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700"
+              title="Admin Panel"
+            >
+              {/* Admin grid icon — visually distinct from the home favicon */}
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="3" y="3" width="7" height="7" rx="1" />
+                <rect x="14" y="3" width="7" height="7" rx="1" />
+                <rect x="3" y="14" width="7" height="7" rx="1" />
+                <rect x="14" y="14" width="7" height="7" rx="1" />
+              </svg>
+            </Link>
+          </div>
           <h1 className="text-lg font-semibold text-gray-900">Measurements</h1>
           <button
             type="button"

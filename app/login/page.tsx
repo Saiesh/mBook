@@ -5,6 +5,17 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
+// Roles permitted to access the admin portal (/admin/*)
+const ADMIN_ROLES = ["admin", "ho_qs"] as const;
+// Roles permitted to log in at all — must be one of these to proceed
+const ALLOWED_ROLES = ["admin", "ho_qs", "site_qs"] as const;
+
+type AllowedRole = (typeof ALLOWED_ROLES)[number];
+
+function isAllowedRole(role: string): role is AllowedRole {
+  return (ALLOWED_ROLES as readonly string[]).includes(role);
+}
+
 function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -55,7 +66,35 @@ function LoginPageContent() {
         return;
       }
 
-      router.push(redirectTo);
+      // Fetch the user's role to determine which section they can access.
+      // We use /api/auth/me here because the session cookie is now set and
+      // the server can resolve the role without exposing it in the client bundle.
+      const meRes = await fetch("/api/auth/me");
+      if (!meRes.ok) {
+        await supabase.auth.signOut();
+        setError("Could not verify your account. Please try again.");
+        return;
+      }
+
+      const meJson = (await meRes.json()) as { success: boolean; data?: { role: string } };
+      const role = meJson.data?.role ?? "";
+
+      // Reject login for any account that does not carry a recognised app role.
+      // This prevents deactivated or misconfigured accounts from entering the app.
+      if (!isAllowedRole(role)) {
+        await supabase.auth.signOut();
+        setError("You are not authorised to access this application.");
+        return;
+      }
+
+      // site_qs users are only permitted in the measurements section.
+      // If the original redirect target is the admin area, override it so they
+      // land in the correct part of the app rather than hitting an access-denied page.
+      const isAdminRole = (ADMIN_ROLES as readonly string[]).includes(role);
+      const destination =
+        !isAdminRole && redirectTo.startsWith("/admin") ? "/measurements" : redirectTo;
+
+      router.push(destination);
       router.refresh();
     } catch (err) {
       console.error("Login error:", err);

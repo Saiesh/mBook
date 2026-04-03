@@ -55,9 +55,10 @@ function formatDate(dateStr: string | null | undefined): string {
 
 function formatCurrency(value: number | null | undefined): string {
   if (value == null || isNaN(value)) return "—";
-  return new Intl.NumberFormat("en-US", {
+  // Use Indian locale and INR to match the rest of the app's currency formatting
+  return new Intl.NumberFormat("en-IN", {
     style: "currency",
-    currency: "USD",
+    currency: "INR",
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(value);
