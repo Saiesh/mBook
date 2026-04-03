@@ -1,36 +1,39 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase';
+import { z } from 'zod';
+
+import { requireSessionUser } from '@/lib/api/require-session';
+import {
+  createAreaBodySchema,
+} from '@/lib/api/schemas/areas-team-api';
 import { AreaRepository } from '@/lib/project-management/repositories/AreaRepository';
 import { ProjectRepository } from '@/lib/project-management/repositories/ProjectRepository';
 import type { CreateAreaDTO } from '@/lib/project-management/types';
 
+const projectIdParamSchema = z.string().uuid();
+
 /**
  * GET /api/projects/:id/areas
- * Get area hierarchy for a project (zones and sub-areas as tree)
+ * Get all areas for a project as a flat list
  */
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  try {
-    if (!supabaseAdmin) {
-      return NextResponse.json(
-        { success: false, error: 'Database connection not configured' },
-        { status: 500 }
-      );
-    }
+  const session = await requireSessionUser();
+  if (!session.ok) return session.response;
 
+  try {
     const { id: projectId } = await params;
-    if (!projectId) {
+    const idParsed = projectIdParamSchema.safeParse(projectId);
+    if (!idParsed.success) {
       return NextResponse.json(
         { success: false, error: 'Project ID is required' },
         { status: 400 }
       );
     }
 
-    // Verify project exists
-    const projectRepo = new ProjectRepository(supabaseAdmin);
-    const project = await projectRepo.findById(projectId);
+    const projectRepo = new ProjectRepository(session.supabase);
+    const project = await projectRepo.findById(idParsed.data);
     if (!project) {
       return NextResponse.json(
         { success: false, error: 'Project not found' },
@@ -38,22 +41,19 @@ export async function GET(
       );
     }
 
-    const repository = new AreaRepository(supabaseAdmin);
-    const hierarchy = await repository.getHierarchy(projectId);
+    const repository = new AreaRepository(session.supabase);
+    const areas = await repository.findByProjectId(idParsed.data);
 
     return NextResponse.json({
       success: true,
-      data: hierarchy,
+      data: areas,
     });
   } catch (error) {
-    console.error('Error fetching area hierarchy:', error);
+    console.error('[GET /api/projects/:id/areas]', error);
     return NextResponse.json(
       {
         success: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : 'Failed to fetch area hierarchy',
+        error: error instanceof Error ? error.message : 'Failed to fetch areas',
       },
       { status: 500 }
     );
@@ -62,33 +62,27 @@ export async function GET(
 
 /**
  * POST /api/projects/:id/areas
- * Create a new area (zone or sub-area)
- * Body: { code, name, description?, parentAreaId?, sortOrder? }
- * - parentAreaId: null/omit for zone (level 1), set for sub-area (level 2)
+ * Create a new area
  */
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  try {
-    if (!supabaseAdmin) {
-      return NextResponse.json(
-        { success: false, error: 'Database connection not configured' },
-        { status: 500 }
-      );
-    }
+  const session = await requireSessionUser();
+  if (!session.ok) return session.response;
 
+  try {
     const { id: projectId } = await params;
-    if (!projectId) {
+    const idParsed = projectIdParamSchema.safeParse(projectId);
+    if (!idParsed.success) {
       return NextResponse.json(
-        { success: false, error: 'Project ID is required' },
+        { success: false, error: 'Invalid project id' },
         { status: 400 }
       );
     }
 
-    // Verify project exists
-    const projectRepo = new ProjectRepository(supabaseAdmin);
-    const project = await projectRepo.findById(projectId);
+    const projectRepo = new ProjectRepository(session.supabase);
+    const project = await projectRepo.findById(idParsed.data);
     if (!project) {
       return NextResponse.json(
         { success: false, error: 'Project not found' },
@@ -96,67 +90,33 @@ export async function POST(
       );
     }
 
-    const body = await request.json();
-
-    // Validate required fields
-    if (!body.code || typeof body.code !== 'string') {
+    const body = await request.json().catch(() => null);
+    const parsed = createAreaBodySchema.safeParse(body);
+    if (!parsed.success) {
       return NextResponse.json(
-        { success: false, error: 'Area code is required' },
-        { status: 400 }
+        { success: false, error: 'Invalid request body', details: parsed.error.flatten() },
+        { status: 422 }
       );
     }
 
-    if (!body.name || typeof body.name !== 'string') {
-      return NextResponse.json(
-        { success: false, error: 'Area name is required' },
-        { status: 400 }
-      );
-    }
-
-    // Validate code format (alphanumeric, hyphens, underscores)
-    const codeRegex = /^[A-Z0-9_-]+$/i;
-    if (!codeRegex.test(body.code)) {
-      return NextResponse.json(
-        {
-          success: false,
-          error:
-            'Area code must contain only letters, numbers, hyphens, and underscores',
-        },
-        { status: 400 }
-      );
-    }
-
-    // Build CreateAreaDTO
+    const p = parsed.data;
     const dto: CreateAreaDTO = {
-      projectId,
-      code: body.code.trim().toUpperCase(),
-      name: body.name.trim(),
+      projectId: idParsed.data,
+      code: p.code.trim().toUpperCase(),
+      name: p.name.trim(),
     };
 
-    if (body.description !== undefined && body.description !== null) {
-      dto.description = typeof body.description === 'string'
-        ? body.description.trim()
-        : String(body.description);
+    if (p.description !== undefined && p.description !== null) {
+      dto.description =
+        typeof p.description === 'string' ? p.description.trim() : String(p.description);
     }
 
-    if (body.parentAreaId !== undefined && body.parentAreaId !== null) {
-      dto.parentAreaId = body.parentAreaId;
+    if (p.sortOrder !== undefined && p.sortOrder !== null) {
+      dto.sortOrder = p.sortOrder;
     }
 
-    if (body.sortOrder !== undefined && body.sortOrder !== null) {
-      const sortOrder = Number(body.sortOrder);
-      if (isNaN(sortOrder) || sortOrder < 0) {
-        return NextResponse.json(
-          { success: false, error: 'Sort order must be a non-negative number' },
-          { status: 400 }
-        );
-      }
-      dto.sortOrder = sortOrder;
-    }
-
-    // Check if area code already exists in this project
-    const repository = new AreaRepository(supabaseAdmin);
-    const existingArea = await repository.findByCode(projectId, dto.code);
+    const repository = new AreaRepository(session.supabase);
+    const existingArea = await repository.findByCode(idParsed.data, dto.code);
     if (existingArea) {
       return NextResponse.json(
         {
@@ -177,12 +137,11 @@ export async function POST(
       { status: 201 }
     );
   } catch (error) {
-    console.error('Error creating area:', error);
+    console.error('[POST /api/projects/:id/areas]', error);
     return NextResponse.json(
       {
         success: false,
-        error:
-          error instanceof Error ? error.message : 'Failed to create area',
+        error: error instanceof Error ? error.message : 'Failed to create area',
       },
       { status: 500 }
     );

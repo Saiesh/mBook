@@ -1,17 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase';
-import { UserRepository } from '@/lib/user-management/repositories/UserRepository';
-import type { UserRole } from '@/lib/user-management/types';
-import { getAuthenticatedAdmin, isValidUUID } from '@/lib/auth';
+import { z } from 'zod';
 
-const VALID_ROLES: UserRole[] = ['admin', 'ho_qs', 'site_qs'];
+import { getAuthenticatedAdmin, isValidUUID } from '@/lib/auth';
+import { UserRepository } from '@/lib/user-management/repositories/UserRepository';
+import { supabaseAdmin } from '@/lib/supabase';
+import type { UserRole } from '@/lib/user-management/types';
+
+const USER_ROLE_VALUES = ['admin', 'ho_qs', 'site_qs'] as const satisfies readonly UserRole[];
+
+const updateUserRoleSchema = z.object({
+  role: z.enum(USER_ROLE_VALUES),
+});
 
 /**
  * GET /api/users/:id
  * Get single user by ID (admin only)
  */
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -22,7 +28,7 @@ export async function GET(
       );
     }
 
-    const adminCheck = await getAuthenticatedAdmin(request);
+    const adminCheck = await getAuthenticatedAdmin();
     if (adminCheck instanceof NextResponse) {
       return adminCheck;
     }
@@ -57,12 +63,11 @@ export async function GET(
       data: user,
     });
   } catch (error) {
-    console.error('Error fetching user:', error);
+    console.error('[GET /api/users/:id]', error);
     return NextResponse.json(
       {
         success: false,
-        error:
-          error instanceof Error ? error.message : 'Failed to fetch user',
+        error: error instanceof Error ? error.message : 'Failed to fetch user',
       },
       { status: 500 }
     );
@@ -72,7 +77,6 @@ export async function GET(
 /**
  * PUT /api/users/:id
  * Update user role (admin only)
- * Body: { role }
  */
 export async function PUT(
   request: NextRequest,
@@ -86,7 +90,7 @@ export async function PUT(
       );
     }
 
-    const adminCheck = await getAuthenticatedAdmin(request);
+    const adminCheck = await getAuthenticatedAdmin();
     if (adminCheck instanceof NextResponse) {
       return adminCheck;
     }
@@ -106,20 +110,17 @@ export async function PUT(
       );
     }
 
-    const body = await request.json();
-    if (!body.role || !VALID_ROLES.includes(body.role)) {
+    const body = await request.json().catch(() => null);
+    const parsed = updateUserRoleSchema.safeParse(body);
+    if (!parsed.success) {
       return NextResponse.json(
-        {
-          success: false,
-          error: `Role must be one of: ${VALID_ROLES.join(', ')}`,
-        },
-        { status: 400 }
+        { success: false, error: 'Invalid request body', details: parsed.error.flatten() },
+        { status: 422 }
       );
     }
 
     const repository = new UserRepository(supabaseAdmin);
 
-    // Verify user exists before update
     const existing = await repository.findById(id);
     if (!existing) {
       return NextResponse.json(
@@ -128,19 +129,18 @@ export async function PUT(
       );
     }
 
-    const user = await repository.updateRole(id, body.role as UserRole);
+    const user = await repository.updateRole(id, parsed.data.role);
 
     return NextResponse.json({
       success: true,
       data: user,
     });
   } catch (error) {
-    console.error('Error updating user role:', error);
+    console.error('[PUT /api/users/:id]', error);
     return NextResponse.json(
       {
         success: false,
-        error:
-          error instanceof Error ? error.message : 'Failed to update user role',
+        error: error instanceof Error ? error.message : 'Failed to update user role',
       },
       { status: 500 }
     );

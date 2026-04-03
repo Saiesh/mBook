@@ -15,11 +15,14 @@ import {
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { UserRole } from '@/lib/user-management/types';
 
+// Why: hits live Auth + `users` table; keep default unit test run fast and credential-optional.
+const runIntegrationTests = process.env.RUN_INTEGRATION_TESTS === 'true';
+
 /**
  * Integration tests - uses real Supabase database
  * Note: These tests require a test database to be set up
  */
-describe('UserRepository - Integration Tests', () => {
+describe.skipIf(!runIntegrationTests)('UserRepository - Integration Tests', () => {
   let db: SupabaseClient;
   let repository: UserRepository;
   let createdUserIds: string[] = [];

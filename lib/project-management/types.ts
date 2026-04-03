@@ -1,6 +1,6 @@
 /**
  * Project Management Module - Type Definitions
- * Aligned with TECHNICAL_DESIGN_PROJECT_MANAGEMENT.md
+ * Domain shapes mirror `database/` migrations and `lib/supabase/database.types.ts` once generated.
  */
 
 export type ProjectStatus = 'active' | 'completed' | 'on_hold' | 'cancelled';
@@ -79,7 +79,7 @@ export interface PaginatedResult<T> {
 }
 
 // -----------------------------------------------------------------------------
-// Area Types (hierarchical: zone level 1 → area level 2)
+// Area Types (flat list scoped to a project)
 // -----------------------------------------------------------------------------
 
 export interface Area {
@@ -88,8 +88,6 @@ export interface Area {
   code: string;
   name: string;
   description?: string | null;
-  parentAreaId?: string | null;
-  level: 1 | 2;
   sortOrder: number;
   isActive: boolean;
   createdAt: string;
@@ -97,16 +95,11 @@ export interface Area {
   deletedAt?: string | null;
 }
 
-export interface AreaHierarchy extends Area {
-  children: Area[];
-}
-
 export interface CreateAreaDTO {
   projectId: string;
   code: string;
   name: string;
   description?: string;
-  parentAreaId?: string | null;
   sortOrder?: number;
 }
 
@@ -114,7 +107,6 @@ export interface UpdateAreaDTO {
   code?: string;
   name?: string;
   description?: string;
-  parentAreaId?: string | null;
   sortOrder?: number;
   isActive?: boolean;
 }

@@ -14,8 +14,12 @@ import {
   generateTestCode,
 } from '@/tests/utils/test-helpers';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { TeamMemberRole } from '@/lib/project-management/types';
 
-describe('ProjectTeamRepository - Integration Tests', () => {
+// Why: remote Supabase + FK-safe users for `project_team_members` require a seeded DB.
+const runIntegrationTests = process.env.RUN_INTEGRATION_TESTS === 'true';
+
+describe.skipIf(!runIntegrationTests)('ProjectTeamRepository - Integration Tests', () => {
   let db: SupabaseClient;
   let teamRepository: ProjectTeamRepository;
   let projectRepository: ProjectRepository;
@@ -43,77 +47,69 @@ describe('ProjectTeamRepository - Integration Tests', () => {
   });
 
   describe('addMember()', () => {
-    it('should add a team member with viewer role', async () => {
+    it('should add a team member with ho_qs role', async () => {
       const member = await teamRepository.addMember({
         projectId: testProjectId,
         userId: TEST_USER_ID_2,
-        role: 'viewer',
-        addedBy: TEST_USER_ID,
+        role: 'ho_qs',
       });
 
       expect(member.id).toBeDefined();
       expect(member.projectId).toBe(testProjectId);
       expect(member.userId).toBe(TEST_USER_ID_2);
-      expect(member.role).toBe('viewer');
-      expect(member.addedBy).toBe(TEST_USER_ID);
-      expect(member.addedAt).toBeDefined();
+      expect(member.role).toBe('ho_qs');
+      expect(member.assignedAt).toBeDefined();
       expect(member.removedAt).toBeNull();
     });
 
-    it('should add a team member with editor role', async () => {
+    it('should add a team member with site_qs role', async () => {
       const member = await teamRepository.addMember({
         projectId: testProjectId,
         userId: TEST_USER_ID_2,
-        role: 'editor',
-        addedBy: TEST_USER_ID,
+        role: 'site_qs',
       });
 
-      expect(member.role).toBe('editor');
+      expect(member.role).toBe('site_qs');
     });
 
-    it('should add a team member with admin role', async () => {
+    it('should add a team member with project_incharge role', async () => {
       const member = await teamRepository.addMember({
         projectId: testProjectId,
         userId: TEST_USER_ID_2,
-        role: 'admin',
-        addedBy: TEST_USER_ID,
+        role: 'project_incharge',
       });
 
-      expect(member.role).toBe('admin');
+      expect(member.role).toBe('project_incharge');
     });
 
-    it('should throw error for duplicate member', async () => {
+    it('should allow the same user twice when roles differ', async () => {
       await teamRepository.addMember({
         projectId: testProjectId,
         userId: TEST_USER_ID_2,
-        role: 'viewer',
-        addedBy: TEST_USER_ID,
+        role: 'ho_qs',
       });
 
-      // Try adding same user again
-      await expect(
-        teamRepository.addMember({
-          projectId: testProjectId,
-          userId: TEST_USER_ID_2,
-          role: 'editor',
-          addedBy: TEST_USER_ID,
-        })
-      ).rejects.toThrow();
+      await teamRepository.addMember({
+        projectId: testProjectId,
+        userId: TEST_USER_ID_2,
+        role: 'site_qs',
+      });
+
+      const members = await teamRepository.getTeamMembers(testProjectId);
+      expect(members.filter((m) => m.userId === TEST_USER_ID_2)).toHaveLength(2);
     });
 
     it('should add multiple members to same project', async () => {
       await teamRepository.addMember({
         projectId: testProjectId,
         userId: TEST_USER_ID_2,
-        role: 'viewer',
-        addedBy: TEST_USER_ID,
+        role: 'ho_qs',
       });
 
       await teamRepository.addMember({
         projectId: testProjectId,
         userId: TEST_USER_ID_3,
-        role: 'editor',
-        addedBy: TEST_USER_ID,
+        role: 'site_qs',
       });
 
       const members = await teamRepository.getTeamMembers(testProjectId);
@@ -122,18 +118,19 @@ describe('ProjectTeamRepository - Integration Tests', () => {
   });
 
   describe('removeMember()', () => {
+    const primaryRole: TeamMemberRole = 'ho_qs';
+
     beforeEach(async () => {
       // Add a test member
       await teamRepository.addMember({
         projectId: testProjectId,
         userId: TEST_USER_ID_2,
-        role: 'viewer',
-        addedBy: TEST_USER_ID,
+        role: primaryRole,
       });
     });
 
     it('should soft remove a team member', async () => {
-      await teamRepository.removeMember(testProjectId, TEST_USER_ID_2);
+      await teamRepository.removeMember(testProjectId, TEST_USER_ID_2, primaryRole);
 
       const members = await teamRepository.getTeamMembers(testProjectId);
       expect(members.find((m) => m.userId === TEST_USER_ID_2)).toBeUndefined();
@@ -141,19 +138,23 @@ describe('ProjectTeamRepository - Integration Tests', () => {
 
     it('should not throw for non-existent member', async () => {
       await expect(
-        teamRepository.removeMember(testProjectId, '00000000-0000-0000-0000-000000000999')
+        teamRepository.removeMember(
+          testProjectId,
+          '00000000-0000-0000-0000-000000000999',
+          'site_qs'
+        )
       ).resolves.not.toThrow();
     });
 
     it('should not throw when removing already removed member', async () => {
-      await teamRepository.removeMember(testProjectId, TEST_USER_ID_2);
+      await teamRepository.removeMember(testProjectId, TEST_USER_ID_2, primaryRole);
       await expect(
-        teamRepository.removeMember(testProjectId, TEST_USER_ID_2)
+        teamRepository.removeMember(testProjectId, TEST_USER_ID_2, primaryRole)
       ).resolves.not.toThrow();
     });
 
     it('should update removed_at timestamp', async () => {
-      await teamRepository.removeMember(testProjectId, TEST_USER_ID_2);
+      await teamRepository.removeMember(testProjectId, TEST_USER_ID_2, primaryRole);
 
       // Query directly to check removed_at
       const { data } = await db
@@ -161,7 +162,8 @@ describe('ProjectTeamRepository - Integration Tests', () => {
         .select('*')
         .eq('project_id', testProjectId)
         .eq('user_id', TEST_USER_ID_2)
-        .single();
+        .eq('role', primaryRole)
+        .maybeSingle();
 
       expect(data?.removed_at).not.toBeNull();
     });
@@ -173,14 +175,12 @@ describe('ProjectTeamRepository - Integration Tests', () => {
       await teamRepository.addMember({
         projectId: testProjectId,
         userId: TEST_USER_ID_2,
-        role: 'viewer',
-        addedBy: TEST_USER_ID,
+        role: 'ho_qs',
       });
       await teamRepository.addMember({
         projectId: testProjectId,
         userId: TEST_USER_ID_3,
-        role: 'editor',
-        addedBy: TEST_USER_ID,
+        role: 'site_qs',
       });
     });
 
@@ -193,7 +193,7 @@ describe('ProjectTeamRepository - Integration Tests', () => {
     });
 
     it('should not include removed members', async () => {
-      await teamRepository.removeMember(testProjectId, TEST_USER_ID_2);
+      await teamRepository.removeMember(testProjectId, TEST_USER_ID_2, 'ho_qs');
 
       const members = await teamRepository.getTeamMembers(testProjectId);
       expect(members.length).toBe(1);
@@ -224,13 +224,13 @@ describe('ProjectTeamRepository - Integration Tests', () => {
       // This is mainly testing that the query doesn't fail with the join
     });
 
-    it('should order by added_at', async () => {
+    it('should order by assigned_at', async () => {
       const members = await teamRepository.getTeamMembers(testProjectId);
 
       expect(members.length).toBeGreaterThan(1);
       for (let i = 1; i < members.length; i++) {
-        const prev = new Date(members[i - 1].addedAt).getTime();
-        const curr = new Date(members[i].addedAt).getTime();
+        const prev = new Date(members[i - 1].assignedAt).getTime();
+        const curr = new Date(members[i].assignedAt).getTime();
         expect(curr >= prev).toBe(true);
       }
     });
@@ -241,8 +241,7 @@ describe('ProjectTeamRepository - Integration Tests', () => {
       await teamRepository.addMember({
         projectId: testProjectId,
         userId: TEST_USER_ID_2,
-        role: 'viewer',
-        addedBy: TEST_USER_ID,
+        role: 'ho_qs',
       });
     });
 
@@ -260,7 +259,7 @@ describe('ProjectTeamRepository - Integration Tests', () => {
     });
 
     it('should return false for removed member', async () => {
-      await teamRepository.removeMember(testProjectId, TEST_USER_ID_2);
+      await teamRepository.removeMember(testProjectId, TEST_USER_ID_2, 'ho_qs');
 
       const result = await teamRepository.isMember(testProjectId, TEST_USER_ID_2);
       expect(result).toBe(false);
@@ -296,8 +295,7 @@ describe('ProjectTeamRepository - Integration Tests', () => {
       await teamRepository.addMember({
         projectId: testProjectId,
         userId: TEST_USER_ID_2,
-        role: 'editor',
-        addedBy: TEST_USER_ID,
+        role: 'site_qs',
       });
 
       // Check membership
@@ -319,23 +317,21 @@ describe('ProjectTeamRepository - Integration Tests', () => {
       await teamRepository.addMember({
         projectId: testProjectId,
         userId: TEST_USER_ID_2,
-        role: 'viewer',
-        addedBy: TEST_USER_ID,
+        role: 'ho_qs',
       });
       await teamRepository.addMember({
         projectId: testProjectId,
         userId: TEST_USER_ID_3,
-        role: 'admin',
-        addedBy: TEST_USER_ID,
+        role: 'project_incharge',
       });
 
       const members = await teamRepository.getTeamMembers(testProjectId);
 
-      const viewer = members.find((m) => m.userId === TEST_USER_ID_2);
-      const admin = members.find((m) => m.userId === TEST_USER_ID_3);
+      const hoQs = members.find((m) => m.userId === TEST_USER_ID_2);
+      const incharge = members.find((m) => m.userId === TEST_USER_ID_3);
 
-      expect(viewer?.role).toBe('viewer');
-      expect(admin?.role).toBe('admin');
+      expect(hoQs?.role).toBe('ho_qs');
+      expect(incharge?.role).toBe('project_incharge');
 
       // Role-based logic can be implemented in service layer
       // Here we just verify the roles are stored correctly
@@ -344,7 +340,7 @@ describe('ProjectTeamRepository - Integration Tests', () => {
 
   describe('error handling', () => {
     it('should throw error when initialized without client', () => {
-      expect(() => new ProjectTeamRepository(null as any)).toThrow(
+      expect(() => new ProjectTeamRepository(null as unknown as SupabaseClient)).toThrow(
         'ProjectTeamRepository requires a Supabase client'
       );
     });
@@ -354,8 +350,7 @@ describe('ProjectTeamRepository - Integration Tests', () => {
         teamRepository.addMember({
           projectId: '00000000-0000-0000-0000-000000000999',
           userId: TEST_USER_ID_2,
-          role: 'viewer',
-          addedBy: TEST_USER_ID,
+          role: 'ho_qs',
         })
       ).rejects.toThrow();
     });

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { AuthProvider } from "./contexts/AuthContext";
+import ServiceWorkerRegistration from "./components/ServiceWorkerRegistration";
 
 export const metadata: Metadata = {
   title: "mBook - Landscaping Measurements",
@@ -23,6 +24,8 @@ export default function RootLayout({
       <body className="antialiased">
         <AuthProvider>
           {children}
+          {/* Why: register once at app root so all routes benefit from offline caching. */}
+          <ServiceWorkerRegistration />
         </AuthProvider>
       </body>
     </html>

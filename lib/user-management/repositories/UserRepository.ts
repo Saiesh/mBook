@@ -13,6 +13,10 @@ import type {
   UserRole,
 } from '../types';
 
+/** Why: explicit user row projection for list/detail queries. */
+const USER_TABLE_SELECT =
+  'id, email, name, phone, role, is_active, last_login_at, created_at, updated_at';
+
 /** Database row shape (snake_case) */
 interface UserRow {
   id: string;
@@ -88,7 +92,7 @@ export class UserRepository implements IUserRepository {
   async findById(id: string): Promise<User | null> {
     const { data, error } = await this.db
       .from('users')
-      .select('*')
+      .select(USER_TABLE_SELECT)
       .eq('id', id)
       .maybeSingle();
 
@@ -107,7 +111,7 @@ export class UserRepository implements IUserRepository {
 
     let query = this.db
       .from('users')
-      .select('*', { count: 'exact' });
+      .select(USER_TABLE_SELECT, { count: 'exact' });
 
     if (filters.role) {
       query = query.eq('role', filters.role);
@@ -164,7 +168,7 @@ export class UserRepository implements IUserRepository {
       .from('users')
       .update({ role })
       .eq('id', userId)
-      .select()
+      .select(USER_TABLE_SELECT)
       .single();
 
     if (error) {
@@ -179,7 +183,7 @@ export class UserRepository implements IUserRepository {
   async findByEmail(email: string): Promise<User | null> {
     const { data, error } = await this.db
       .from('users')
-      .select('*')
+      .select(USER_TABLE_SELECT)
       .eq('email', email)
       .maybeSingle();
 

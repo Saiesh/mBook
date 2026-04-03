@@ -1,13 +1,12 @@
 /**
  * Auth helpers for API routes
- * Used for admin-only operations requiring Bearer token + admin role
+ * Used for admin-only operations after SSR session verification
  */
 
-import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase';
+import { NextResponse } from 'next/server';
 
-const UUID_REGEX =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+import { getSupabaseServerClient } from '@/lib/supabase/server';
+import { supabaseAdmin } from '@/lib/supabase';
 
 export interface AuthenticatedUser {
   id: string;
@@ -17,12 +16,12 @@ export interface AuthenticatedUser {
 }
 
 /**
- * Get authenticated user with admin role from Bearer token.
- * Returns the user if valid and admin, or a NextResponse for 401/403.
+ * Verifies cookie session via SSR client, then loads role from `users` with service role.
+ * Why: identity comes from `getUser()` (JWT verified server-side); role lookup uses admin to avoid RLS gaps on admin checks.
  */
-export async function getAuthenticatedAdmin(
-  request: NextRequest
-): Promise<AuthenticatedUser | NextResponse> {
+export async function getAuthenticatedAdmin(): Promise<
+  AuthenticatedUser | NextResponse
+> {
   if (!supabaseAdmin) {
     return NextResponse.json(
       { success: false, error: 'Authentication service not configured' },
@@ -30,23 +29,15 @@ export async function getAuthenticatedAdmin(
     );
   }
 
-  const authHeader = request.headers.get('authorization');
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return NextResponse.json(
-      { success: false, error: 'Authorization token required' },
-      { status: 401 }
-    );
-  }
-
-  const token = authHeader.slice(7);
+  const supabase = await getSupabaseServerClient();
   const {
     data: { user },
     error: authError,
-  } = await supabaseAdmin.auth.getUser(token);
+  } = await supabase.auth.getUser();
 
-  if (authError || !user) {
+  if (authError || !user?.id) {
     return NextResponse.json(
-      { success: false, error: 'Invalid or expired token' },
+      { success: false, error: 'Unauthorized' },
       { status: 401 }
     );
   }
@@ -58,6 +49,7 @@ export async function getAuthenticatedAdmin(
     .maybeSingle();
 
   if (dbError || !userData) {
+    console.error('[getAuthenticatedAdmin]', { userId: user.id, dbError });
     return NextResponse.json(
       { success: false, error: 'Failed to fetch user data' },
       { status: 500 }
@@ -83,5 +75,7 @@ export async function getAuthenticatedAdmin(
  * Validate that a string is a valid UUID
  */
 export function isValidUUID(id: string): boolean {
-  return UUID_REGEX.test(id);
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    id
+  );
 }

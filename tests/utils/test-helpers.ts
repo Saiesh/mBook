@@ -3,6 +3,8 @@
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+// Why: helper assertions use Vitest globals, but production type-check requires explicit import.
+import { expect } from 'vitest';
 import type {
   CreateProjectDTO,
   CreateAreaDTO,
@@ -75,12 +77,9 @@ export function createMockAreaDTO(
 ): CreateAreaDTO {
   return {
     projectId,
+    code: generateTestCode('AREA'),
     name: 'Test Area',
-    type: 'zone',
-    level: 1,
-    path: '/',
-    displayOrder: 1,
-    color: '#3B82F6',
+    sortOrder: 1,
     ...overrides,
   };
 }
@@ -194,20 +193,14 @@ export function expectAreaToMatch(
   actual: Area,
   expected: Partial<Area>
 ): void {
+  if (expected.code !== undefined) {
+    expect(actual.code).toBe(expected.code);
+  }
   if (expected.name !== undefined) {
     expect(actual.name).toBe(expected.name);
   }
-  if (expected.type !== undefined) {
-    expect(actual.type).toBe(expected.type);
-  }
-  if (expected.level !== undefined) {
-    expect(actual.level).toBe(expected.level);
-  }
-  if (expected.parentId !== undefined) {
-    expect(actual.parentId).toBe(expected.parentId);
-  }
-  if (expected.color !== undefined) {
-    expect(actual.color).toBe(expected.color);
+  if (expected.sortOrder !== undefined) {
+    expect(actual.sortOrder).toBe(expected.sortOrder);
   }
 }
 

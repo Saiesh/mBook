@@ -70,10 +70,8 @@ function projectToFormState(project: Project): typeof INITIAL_FORM_STATE {
     endDate: project.endDate
       ? new Date(project.endDate).toISOString().slice(0, 10)
       : "",
-    budget:
-      project.budget != null && project.budget !== ""
-        ? String(project.budget)
-        : "",
+    // Why: `budget` on Project is numeric/null, so null-check alone is the correct type-safe guard.
+    budget: project.budget != null ? String(project.budget) : "",
     description: project.description ?? "",
     status: project.status ?? "active",
   };

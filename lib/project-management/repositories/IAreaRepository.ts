@@ -1,11 +1,10 @@
 /**
  * Area Repository Interface
- * Data access contract for Area entity with hierarchical parent-child support
+ * Data access contract for flat project areas
  */
 
 import type {
   Area,
-  AreaHierarchy,
   CreateAreaDTO,
   UpdateAreaDTO,
 } from '../types';
@@ -17,6 +16,4 @@ export interface IAreaRepository {
   findByCode(projectId: string, code: string): Promise<Area | null>;
   update(id: string, updates: UpdateAreaDTO): Promise<Area>;
   softDelete(id: string): Promise<void>;
-  countByParentId(parentId: string): Promise<number>;
-  getHierarchy(projectId: string): Promise<AreaHierarchy[]>;
 }

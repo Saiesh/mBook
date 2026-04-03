@@ -12,6 +12,10 @@
 
 # testing
 /coverage
+/coverage.json
+.vitest/
+*.test.js.snap
+test-results/
 
 # next.js
 /.next/
@@ -32,6 +36,10 @@ yarn-error.log*
 # local env files
 .env*.local
 .env
+# Why: may hold Supabase service role and DB URLs for integration tests — never ship secrets.
+.env.test
+# Why: local Python virtualenv is machine-specific and not used in this Node.js repo.
+.venv/
 
 # vercel
 .vercel

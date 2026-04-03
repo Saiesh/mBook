@@ -11,6 +11,7 @@ import type {
   TeamMemberWithUser,
   AddTeamMemberDTO,
 } from '../types';
+import { PROJECT_TABLE_SELECT } from './ProjectRepository';
 
 /** Database row shape for project_team_members (snake_case) */
 interface ProjectTeamMemberRow {
@@ -30,12 +31,20 @@ interface TeamMemberJoinRow {
   user_id: string;
   role: string;
   assigned_at: string;
-  user: {
-    id: string;
-    email: string;
-    name: string;
-    phone: string | null;
-  } | null;
+  user:
+    | {
+        id: string;
+        email: string;
+        name: string;
+        phone: string | null;
+      }
+    | Array<{
+        id: string;
+        email: string;
+        name: string;
+        phone: string | null;
+      }>
+    | null;
 }
 
 /** Projects table row (snake_case) - for getUserProjects */
@@ -71,7 +80,8 @@ function rowToProjectTeamMember(row: ProjectTeamMemberRow): ProjectTeamMember {
 }
 
 function joinRowToTeamMemberWithUser(row: TeamMemberJoinRow): TeamMemberWithUser {
-  const u = row.user;
+  // Why: depending on relation cardinality/typegen, Supabase may return embedded row as object or single-item array.
+  const u = Array.isArray(row.user) ? row.user[0] ?? null : row.user;
   return {
     id: row.id,
     projectId: row.project_id,
@@ -231,7 +241,7 @@ export class ProjectTeamRepository implements IProjectTeamRepository {
 
     const { data: projects, error: projectsError } = await this.db
       .from('projects')
-      .select('*')
+      .select(PROJECT_TABLE_SELECT)
       .in('id', projectIds)
       .is('deleted_at', null);
 

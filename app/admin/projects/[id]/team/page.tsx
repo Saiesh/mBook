@@ -167,7 +167,8 @@ export default function TeamManagementPage() {
     } finally {
       setUsersLoading(false);
     }
-  }, [userSearch]);
+  // Why: this callback reads selectedUserId when deciding whether to reset selection.
+  }, [selectedUserId, userSearch]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -246,9 +247,10 @@ export default function TeamManagementPage() {
     }
   };
 
-  const userAlreadyInTeam = selectedUserId && members.some(
-    (m) => m.userId === selectedUserId && m.role === selectedRole
-  );
+  // Why: coerce to strict boolean so button props don't receive empty-string unions.
+  const userAlreadyInTeam =
+    Boolean(selectedUserId) &&
+    members.some((m) => m.userId === selectedUserId && m.role === selectedRole);
 
   return (
     <div className="min-h-screen bg-gray-50">

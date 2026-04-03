@@ -15,11 +15,14 @@ import {
 } from '@/tests/utils/test-helpers';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+// Why: remote Supabase + seeded `users` rows are required; default `npm test` stays local/offline-safe.
+const runIntegrationTests = process.env.RUN_INTEGRATION_TESTS === 'true';
+
 /**
  * Integration tests - uses real Supabase database
  * Note: These tests require a test database to be set up
  */
-describe('ProjectRepository - Integration Tests', () => {
+describe.skipIf(!runIntegrationTests)('ProjectRepository - Integration Tests', () => {
   let db: SupabaseClient;
   let repository: ProjectRepository;
   let createdProjectIds: string[] = [];
@@ -171,9 +174,12 @@ describe('ProjectRepository - Integration Tests', () => {
         const dto = createMockProjectDTO({
           name: `Project ${i}`,
           code: generateTestCode(`FIND${i}`),
-          status: i % 2 === 0 ? 'active' : 'completed',
         });
         const project = await repository.create(dto, TEST_USER_ID);
+        // Why: CreateProjectDTO has no status; set mixed statuses via update for filter assertions.
+        await repository.update(project.id, {
+          status: i % 2 === 0 ? 'active' : 'completed',
+        });
         createdProjectIds.push(project.id);
       }
     });

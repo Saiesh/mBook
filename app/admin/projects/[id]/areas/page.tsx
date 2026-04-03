@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import type { AreaHierarchy, Area } from "@/lib/project-management/types";
+import type { Area } from "@/lib/project-management/types";
 
 interface ApiResponse<T> {
   success: boolean;
@@ -35,7 +35,7 @@ export default function AreasManagementPage() {
   const params = useParams();
   const projectId = params.id as string;
 
-  const [hierarchy, setHierarchy] = useState<AreaHierarchy[]>([]);
+  const [areas, setAreas] = useState<Area[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [projectName, setProjectName] = useState<string>("");
@@ -43,7 +43,6 @@ export default function AreasManagementPage() {
   // Add/Edit modal state
   const [modalOpen, setModalOpen] = useState(false);
   const [editingArea, setEditingArea] = useState<Area | null>(null);
-  const [parentZoneId, setParentZoneId] = useState<string | null>(null);
   const [formCode, setFormCode] = useState("");
   const [formName, setFormName] = useState("");
   const [formDescription, setFormDescription] = useState("");
@@ -61,7 +60,7 @@ export default function AreasManagementPage() {
     setError(null);
     try {
       const res = await fetch(`/api/projects/${projectId}/areas`);
-      const json: ApiResponse<AreaHierarchy[]> = await res.json();
+      const json: ApiResponse<Area[]> = await res.json();
 
       if (!res.ok) {
         throw new Error(json.error ?? "Failed to load areas");
@@ -71,10 +70,10 @@ export default function AreasManagementPage() {
         throw new Error("Invalid response from server");
       }
 
-      setHierarchy(json.data);
+      setAreas(json.data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load areas");
-      setHierarchy([]);
+      setAreas([]);
     } finally {
       setLoading(false);
     }
@@ -98,20 +97,8 @@ export default function AreasManagementPage() {
     fetchProject();
   }, [fetchAreas, fetchProject]);
 
-  const openAddZone = () => {
+  const openAddArea = () => {
     setEditingArea(null);
-    setParentZoneId(null);
-    setFormCode("");
-    setFormName("");
-    setFormDescription("");
-    setFormErrors({});
-    setSubmitError(null);
-    setModalOpen(true);
-  };
-
-  const openAddSubArea = (zone: Area) => {
-    setEditingArea(null);
-    setParentZoneId(zone.id);
     setFormCode("");
     setFormName("");
     setFormDescription("");
@@ -122,7 +109,6 @@ export default function AreasManagementPage() {
 
   const openEditArea = (area: Area) => {
     setEditingArea(area);
-    setParentZoneId(area.parentAreaId ?? null);
     setFormCode(area.code);
     setFormName(area.name);
     setFormDescription(area.description ?? "");
@@ -134,7 +120,6 @@ export default function AreasManagementPage() {
   const closeModal = () => {
     setModalOpen(false);
     setEditingArea(null);
-    setParentZoneId(null);
   };
 
   const handleModalSubmit = async (e: React.FormEvent) => {
@@ -169,20 +154,14 @@ export default function AreasManagementPage() {
           return;
         }
       } else {
+        // Why: new sort order appends the area to the end so users get
+        // predictable ordering before any manual reordering.
         const body: Record<string, unknown> = {
           code,
           name,
           description: description ?? null,
+          sortOrder: areas.length,
         };
-        if (parentZoneId) {
-          body.parentAreaId = parentZoneId;
-          const zone = hierarchy.find((z) => z.id === parentZoneId);
-          if (zone) {
-            body.sortOrder = zone.children.length;
-          }
-        } else {
-          body.sortOrder = hierarchy.length;
-        }
 
         const res = await fetch(`/api/projects/${projectId}/areas`, {
           method: "POST",
@@ -234,9 +213,9 @@ export default function AreasManagementPage() {
     }
   };
 
-  const handleMoveUp = async (area: Area, siblings: Area[], index: number) => {
+  const handleMoveUp = async (area: Area, index: number) => {
     if (index <= 0) return;
-    const prev = siblings[index - 1];
+    const prev = areas[index - 1];
     const prevOrder = prev.sortOrder;
     const currOrder = area.sortOrder;
 
@@ -257,9 +236,9 @@ export default function AreasManagementPage() {
     }
   };
 
-  const handleMoveDown = async (area: Area, siblings: Area[], index: number) => {
-    if (index >= siblings.length - 1) return;
-    const next = siblings[index + 1];
+  const handleMoveDown = async (area: Area, index: number) => {
+    if (index >= areas.length - 1) return;
+    const next = areas[index + 1];
     const nextOrder = next.sortOrder;
     const currOrder = area.sortOrder;
 
@@ -302,10 +281,10 @@ export default function AreasManagementPage() {
           </h1>
           <button
             type="button"
-            onClick={openAddZone}
+            onClick={openAddArea}
             className="bg-green-600 hover:bg-green-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
           >
-            Add Zone
+            Add Area
           </button>
         </div>
       </header>
@@ -333,180 +312,79 @@ export default function AreasManagementPage() {
               <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-green-600 border-r-transparent mb-2" />
               <p>Loading areas...</p>
             </div>
-          ) : hierarchy.length === 0 ? (
+          ) : areas.length === 0 ? (
             <div className="p-12 text-center">
               <p className="text-gray-500 mb-4">No areas yet.</p>
               <button
                 type="button"
-                onClick={openAddZone}
+                onClick={openAddArea}
                 className="text-green-600 hover:text-green-700 font-medium"
               >
-                Add your first zone
+                Add your first area
               </button>
             </div>
           ) : (
-            <div className="divide-y divide-gray-200">
-              {hierarchy.map((zone) => (
-                <div key={zone.id} className="border-b border-gray-100 last:border-b-0">
-                  {/* Zone row */}
-                  <div className="flex items-center gap-2 px-4 py-3 hover:bg-gray-50 group">
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <span className="text-amber-500 text-lg" aria-hidden>
-                        ■
-                      </span>
-                      <div className="min-w-0">
-                        <span className="font-medium text-gray-900">
-                          {zone.name}
-                        </span>
-                        <span className="text-gray-500 text-sm ml-2">
-                          [{zone.code}]
-                        </span>
-                        {zone.description && (
-                          <p className="text-sm text-gray-500 truncate mt-0.5">
-                            {zone.description}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handleMoveUp(
-                            zone,
-                            hierarchy,
-                            hierarchy.indexOf(zone)
-                          )
-                        }
-                        disabled={hierarchy.indexOf(zone) === 0}
-                        className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded disabled:opacity-40 disabled:cursor-not-allowed"
-                        title="Move up"
-                      >
-                        ↑
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handleMoveDown(
-                            zone,
-                            hierarchy,
-                            hierarchy.indexOf(zone)
-                          )
-                        }
-                        disabled={hierarchy.indexOf(zone) === hierarchy.length - 1}
-                        className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded disabled:opacity-40 disabled:cursor-not-allowed"
-                        title="Move down"
-                      >
-                        ↓
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => openEditArea(zone)}
-                        className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded"
-                        title="Edit"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => openAddSubArea(zone)}
-                        className="p-1.5 text-green-600 hover:text-green-700 hover:bg-green-50 rounded"
-                        title="Add sub-area"
-                      >
-                        + Sub
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteClick(zone)}
-                        className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded"
-                        title="Delete"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Sub-areas */}
-                  {zone.children.length > 0 && (
-                    <div className="bg-gray-50/80 pl-12 pr-4 pb-2">
-                      {zone.children.map((subArea, idx) => (
-                        <div
-                          key={subArea.id}
-                          className="flex items-center gap-2 py-2 hover:bg-white/60 rounded group"
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-left text-gray-600">
+                <tr>
+                  <th className="px-4 py-3 font-medium">Code</th>
+                  <th className="px-4 py-3 font-medium">Name</th>
+                  <th className="px-4 py-3 font-medium">Description</th>
+                  <th className="px-4 py-3 font-medium">Order</th>
+                  <th className="px-4 py-3 font-medium text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {areas.map((area, index) => (
+                  <tr key={area.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 font-mono text-gray-700">{area.code}</td>
+                    <td className="px-4 py-3 font-medium text-gray-900">{area.name}</td>
+                    <td className="px-4 py-3 text-gray-600">
+                      {area.description || "—"}
+                    </td>
+                    <td className="px-4 py-3 text-gray-600">{area.sortOrder}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleMoveUp(area, index)}
+                          disabled={index === 0}
+                          className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded disabled:opacity-40 disabled:cursor-not-allowed"
+                          title="Move up"
                         >
-                          <span
-                            className="text-gray-400 text-sm"
-                            aria-hidden
-                          >
-                            └─
-                          </span>
-                          <span className="text-blue-600 text-sm">◆</span>
-                          <div className="flex-1 min-w-0">
-                            <span className="text-gray-800">{subArea.name}</span>
-                            <span className="text-gray-500 text-sm ml-2">
-                              [{subArea.code}]
-                            </span>
-                            {subArea.description && (
-                              <p className="text-sm text-gray-500 truncate">
-                                {subArea.description}
-                              </p>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleMoveUp(
-                                  subArea,
-                                  zone.children,
-                                  idx
-                                )
-                              }
-                              disabled={idx === 0}
-                              className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded disabled:opacity-40 disabled:cursor-not-allowed"
-                              title="Move up"
-                            >
-                              ↑
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleMoveDown(
-                                  subArea,
-                                  zone.children,
-                                  idx
-                                )
-                              }
-                              disabled={idx === zone.children.length - 1}
-                              className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded disabled:opacity-40 disabled:cursor-not-allowed"
-                              title="Move down"
-                            >
-                              ↓
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => openEditArea(subArea)}
-                              className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded"
-                              title="Edit"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteClick(subArea)}
-                              className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded"
-                              title="Delete"
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
+                          ↑
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleMoveDown(area, index)}
+                          disabled={index === areas.length - 1}
+                          className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded disabled:opacity-40 disabled:cursor-not-allowed"
+                          title="Move down"
+                        >
+                          ↓
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openEditArea(area)}
+                          className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded"
+                          title="Edit"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteClick(area)}
+                          className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded"
+                          title="Delete"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
         </div>
       </div>
@@ -522,7 +400,7 @@ export default function AreasManagementPage() {
           >
             <form onSubmit={handleModalSubmit} className="p-6 space-y-4">
               <h2 id="modal-title" className="text-lg font-semibold text-gray-800">
-                {editingArea ? "Edit Area" : parentZoneId ? "Add Sub-area" : "Add Zone"}
+                {editingArea ? "Edit Area" : "Add Area"}
               </h2>
 
               {submitError && (
@@ -551,7 +429,7 @@ export default function AreasManagementPage() {
                   onBlur={() =>
                     setFormCode((c) => c.trim().toUpperCase())
                   }
-                  placeholder="e.g. ZONE-A"
+                  placeholder="e.g. AREA-A"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent uppercase"
                   autoComplete="off"
                 />
@@ -638,19 +516,6 @@ export default function AreasManagementPage() {
               Are you sure you want to delete &quot;{deleteTarget.name}&quot; [
               {deleteTarget.code}]? This cannot be undone.
             </p>
-            {(() => {
-              const zoneWithChildren =
-                deleteTarget.level === 1
-                  ? hierarchy.find((z) => z.id === deleteTarget.id)
-                  : null;
-              const hasChildren =
-                zoneWithChildren && zoneWithChildren.children.length > 0;
-              return hasChildren ? (
-                <p className="text-amber-600 text-sm mb-4">
-                  This zone has sub-areas. Delete sub-areas first.
-                </p>
-              ) : null;
-            })()}
             <div className="flex gap-3">
               <button
                 type="button"
@@ -662,12 +527,7 @@ export default function AreasManagementPage() {
               <button
                 type="button"
                 onClick={handleDeleteConfirm}
-                disabled={
-                  isDeleting ||
-                  (deleteTarget.level === 1 &&
-                    (hierarchy.find((z) => z.id === deleteTarget.id)
-                      ?.children.length ?? 0) > 0)
-                }
+                disabled={isDeleting}
                 className="flex-1 bg-red-600 hover:bg-red-700 disabled:bg-red-400 disabled:cursor-not-allowed text-white font-medium py-2 px-4 rounded-lg transition-colors"
               >
                 {isDeleting ? "Deleting..." : "Delete"}

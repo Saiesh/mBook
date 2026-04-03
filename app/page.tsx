@@ -14,8 +14,9 @@ export default function HomePage() {
           <div className="bg-white rounded-lg shadow-md p-6">
             <h2 className="text-xl font-semibold mb-4 text-gray-800">Quick Actions</h2>
             <div className="space-y-3">
+              {/* Why: points to the project-scoped capture flow instead of the legacy simple form */}
               <Link 
-                href="/measurements/new"
+                href="/measurements?action=capture"
                 className="block w-full bg-green-600 hover:bg-green-700 text-white font-medium py-3 px-4 rounded-lg text-center transition-colors"
               >
                 + New Measurement
@@ -35,16 +36,6 @@ export default function HomePage() {
             <p className="text-gray-500 text-sm text-center py-4">
               No measurements yet. Create your first one!
             </p>
-          </div>
-
-          {/* Admin Access */}
-          <div className="text-center">
-            <Link 
-              href="/admin"
-              className="text-sm text-gray-500 hover:text-gray-700 underline"
-            >
-              Admin Panel
-            </Link>
           </div>
         </div>
       </div>

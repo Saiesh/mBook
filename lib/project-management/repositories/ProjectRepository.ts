@@ -13,6 +13,13 @@ import type {
   PaginatedResult,
 } from '../types';
 
+/**
+ * Explicit column list for `projects` reads/writes.
+ * Why: avoids `select('*')` over-fetching per AGENTS.md; shared with team repository.
+ */
+export const PROJECT_TABLE_SELECT =
+  'id, name, code, client_name, location_city, location_state, location_address, start_date, end_date, status, description, budget, created_by, created_at, updated_at, deleted_at';
+
 /** Database row shape (snake_case) */
 interface ProjectRow {
   id: string;
@@ -92,7 +99,7 @@ export class ProjectRepository implements IProjectRepository {
     const { data, error } = await this.db
       .from('projects')
       .insert(row)
-      .select()
+      .select(PROJECT_TABLE_SELECT)
       .single();
 
     if (error) {
@@ -104,7 +111,7 @@ export class ProjectRepository implements IProjectRepository {
   async findById(id: string): Promise<Project | null> {
     const { data, error } = await this.db
       .from('projects')
-      .select('*')
+      .select(PROJECT_TABLE_SELECT)
       .eq('id', id)
       .is('deleted_at', null)
       .maybeSingle();
@@ -119,7 +126,7 @@ export class ProjectRepository implements IProjectRepository {
     const normalizedCode = code.toUpperCase();
     const { data, error } = await this.db
       .from('projects')
-      .select('*')
+      .select(PROJECT_TABLE_SELECT)
       .eq('code', normalizedCode)
       .is('deleted_at', null)
       .maybeSingle();
@@ -139,7 +146,7 @@ export class ProjectRepository implements IProjectRepository {
 
     let query = this.db
       .from('projects')
-      .select('*', { count: 'exact' })
+      .select(PROJECT_TABLE_SELECT, { count: 'exact' })
       .is('deleted_at', null);
 
     if (filters.status) {
@@ -219,7 +226,7 @@ export class ProjectRepository implements IProjectRepository {
       .update(updateRow)
       .eq('id', id)
       .is('deleted_at', null)
-      .select()
+      .select(PROJECT_TABLE_SELECT)
       .single();
 
     if (error) {

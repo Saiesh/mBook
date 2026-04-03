@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase';
+import { z } from 'zod';
+
+import { requireSessionUser } from '@/lib/api/require-session';
+import { getAuthenticatedAdmin } from '@/lib/auth';
 import { UserRepository } from '@/lib/user-management/repositories/UserRepository';
+import { supabaseAdmin } from '@/lib/supabase';
 import type {
   CreateUserDTO,
   UserRole,
 } from '@/lib/user-management/types';
-import { getAuthenticatedAdmin } from '@/lib/auth';
 
 export interface UserListItem {
   id: string;
@@ -14,44 +17,51 @@ export interface UserListItem {
   phone?: string | null;
 }
 
-const VALID_ROLES: UserRole[] = ['admin', 'ho_qs', 'site_qs'];
+const USER_CREATE_ROLES = ['admin', 'ho_qs', 'site_qs'] as const satisfies readonly UserRole[];
+
+const userListQuerySchema = z.object({
+  page: z.coerce.number().int().positive().optional(),
+  limit: z.coerce.number().int().positive().optional(),
+  search: z.string().optional(),
+  role: z.enum(['admin', 'ho_qs', 'site_qs']).optional(),
+  isActive: z.enum(['true', 'false']).optional(),
+  sortBy: z.string().optional(),
+  sortOrder: z.enum(['asc', 'desc']).optional(),
+});
 
 /**
  * GET /api/users
- * List users - supports two modes:
- * 1. Paginated (admin users page): ?page=1&limit=50&search=&role=&sortBy=created_at&sortOrder=desc
- * 2. Simple (dropdowns): ?search= - returns up to 100 users, no pagination
+ * List users — paginated or simple dropdown mode.
  */
 export async function GET(request: NextRequest) {
+  const session = await requireSessionUser();
+  if (!session.ok) return session.response;
+
   try {
-    if (!supabaseAdmin) {
+    const raw = Object.fromEntries(new URL(request.url).searchParams.entries());
+    const parsed = userListQuerySchema.safeParse(raw);
+    if (!parsed.success) {
       return NextResponse.json(
-        { success: false, error: 'Database connection not configured' },
-        { status: 500 }
+        { success: false, error: 'Invalid query parameters', details: parsed.error.flatten() },
+        { status: 422 }
       );
     }
 
-    const { searchParams } = new URL(request.url);
-    const page = searchParams.get('page');
-    const limit = searchParams.get('limit');
-    const usePagination = page !== null || limit !== null;
+    const q = parsed.data;
+    const usePagination = q.page !== undefined || q.limit !== undefined;
 
-    const repository = new UserRepository(supabaseAdmin);
+    const repository = new UserRepository(session.supabase);
 
     if (usePagination) {
       const filters = {
-        search: searchParams.get('search')?.trim() || undefined,
-        role: (searchParams.get('role') as UserRole) || undefined,
+        search: q.search?.trim() || undefined,
+        role: q.role,
         isActive:
-          searchParams.get('isActive') === 'true'
-            ? true
-            : searchParams.get('isActive') === 'false'
-              ? false
-              : undefined,
-        page: page ? parseInt(page, 10) : 1,
-        limit: limit ? parseInt(limit, 10) : 50,
-        sortBy: searchParams.get('sortBy') || 'created_at',
-        sortOrder: (searchParams.get('sortOrder') as 'asc' | 'desc') || 'desc',
+          q.isActive === 'true' ? true : q.isActive === 'false' ? false : undefined,
+        page: q.page ?? 1,
+        limit: q.limit ?? 50,
+        sortBy: q.sortBy || 'created_at',
+        sortOrder: q.sortOrder || 'desc',
       };
 
       const result = await repository.findAll(filters);
@@ -62,8 +72,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Simple mode for dropdowns (e.g. add team member)
-    const search = searchParams.get('search')?.trim();
+    const search = q.search?.trim();
     const result = await repository.findAll({
       search: search || undefined,
       page: 1,
@@ -84,22 +93,28 @@ export async function GET(request: NextRequest) {
       data: users,
     });
   } catch (error) {
-    console.error('Error in users API:', error);
+    console.error('[GET /api/users]', error);
     return NextResponse.json(
       {
         success: false,
-        error:
-          error instanceof Error ? error.message : 'Failed to fetch users',
+        error: error instanceof Error ? error.message : 'Failed to fetch users',
       },
       { status: 500 }
     );
   }
 }
 
+const createUserBodySchema = z.object({
+  email: z.string().email(),
+  name: z.string().min(1),
+  role: z.enum(USER_CREATE_ROLES),
+  password: z.string().min(6),
+  phone: z.string().optional(),
+});
+
 /**
  * POST /api/users
  * Create a new user (admin only)
- * Body: { email, name, role, password [, phone] }
  */
 export async function POST(request: NextRequest) {
   try {
@@ -110,96 +125,38 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const adminCheck = await getAuthenticatedAdmin(request);
+    const adminCheck = await getAuthenticatedAdmin();
     if (adminCheck instanceof NextResponse) {
       return adminCheck;
     }
 
-    const body = await request.json();
-
-    // Validate required fields
-    if (!body.email || typeof body.email !== 'string') {
+    const body = await request.json().catch(() => null);
+    const parsed = createUserBodySchema.safeParse(body);
+    if (!parsed.success) {
       return NextResponse.json(
-        { success: false, error: 'Email is required' },
-        { status: 400 }
+        { success: false, error: 'Invalid request body', details: parsed.error.flatten() },
+        { status: 422 }
       );
     }
 
-    const email = body.email.trim();
-    if (!email) {
-      return NextResponse.json(
-        { success: false, error: 'Email is required' },
-        { status: 400 }
-      );
-    }
-
-    // Basic email format check
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid email format' },
-        { status: 400 }
-      );
-    }
-
-    if (!body.name || typeof body.name !== 'string') {
-      return NextResponse.json(
-        { success: false, error: 'Name is required' },
-        { status: 400 }
-      );
-    }
-
-    const name = body.name.trim();
-    if (!name) {
-      return NextResponse.json(
-        { success: false, error: 'Name is required' },
-        { status: 400 }
-      );
-    }
-
-    if (!body.role || !VALID_ROLES.includes(body.role)) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: `Role must be one of: ${VALID_ROLES.join(', ')}`,
-        },
-        { status: 400 }
-      );
-    }
-
-    if (!body.password || typeof body.password !== 'string') {
-      return NextResponse.json(
-        { success: false, error: 'Password is required' },
-        { status: 400 }
-      );
-    }
-
-    const password = body.password;
-    if (password.length < 6) {
-      return NextResponse.json(
-        { success: false, error: 'Password must be at least 6 characters' },
-        { status: 400 }
-      );
-    }
-
+    const p = parsed.data;
     const dto: CreateUserDTO = {
-      email,
-      name,
-      role: body.role as UserRole,
-      password,
+      email: p.email.trim(),
+      name: p.name.trim(),
+      role: p.role,
+      password: p.password,
     };
 
-    if (body.phone !== undefined && body.phone !== null) {
-      dto.phone =
-        typeof body.phone === 'string' ? body.phone.trim() : String(body.phone);
+    if (p.phone !== undefined) {
+      dto.phone = p.phone.trim();
     }
 
     const repository = new UserRepository(supabaseAdmin);
 
-    // Check if email already exists
-    const existing = await repository.findByEmail(email);
+    const existing = await repository.findByEmail(dto.email);
     if (existing) {
       return NextResponse.json(
-        { success: false, error: `User with email "${email}" already exists` },
+        { success: false, error: `User with email "${dto.email}" already exists` },
         { status: 409 }
       );
     }
@@ -214,12 +171,11 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     );
   } catch (error) {
-    console.error('Error creating user:', error);
+    console.error('[POST /api/users]', error);
     return NextResponse.json(
       {
         success: false,
-        error:
-          error instanceof Error ? error.message : 'Failed to create user',
+        error: error instanceof Error ? error.message : 'Failed to create user',
       },
       { status: 500 }
     );

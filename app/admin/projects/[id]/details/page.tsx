@@ -6,10 +6,19 @@ import { useParams } from "next/navigation";
 import type {
   Project,
   ProjectStatus,
-  AreaHierarchy,
+  Area,
   TeamMemberWithUser,
   TeamMemberRole,
 } from "@/lib/project-management/types";
+import type { BOQVersion } from "@/lib/boq-management/types";
+
+// Why: details page only needs lightweight bill metadata for summary cards.
+interface BillSummary {
+  id: string;
+  bill_number: string;
+  latestGeneratedVersion: { id: string } | null;
+  latestAcceptedVersion: { id: string } | null;
+}
 
 const STATUS_BADGE_STYLES: Record<ProjectStatus, string> = {
   active: "bg-green-100 text-green-800",
@@ -86,7 +95,7 @@ interface ApiProject {
 
 interface ApiAreas {
   success: boolean;
-  data?: AreaHierarchy[];
+  data?: Area[];
   error?: string;
 }
 
@@ -96,13 +105,27 @@ interface ApiTeam {
   error?: string;
 }
 
+interface ApiBOQ {
+  success: boolean;
+  data?: BOQVersion[];
+  error?: string;
+}
+
+interface ApiBills {
+  success: boolean;
+  data?: BillSummary[];
+  error?: string;
+}
+
 export default function ProjectDetailsPage() {
   const params = useParams();
   const id = params.id as string;
 
   const [project, setProject] = useState<Project | null>(null);
-  const [areas, setAreas] = useState<AreaHierarchy[]>([]);
+  const [areas, setAreas] = useState<Area[]>([]);
   const [team, setTeam] = useState<TeamMemberWithUser[]>([]);
+  const [boqActive, setBoqActive] = useState<BOQVersion | null>(null);
+  const [bills, setBills] = useState<BillSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -112,10 +135,12 @@ export default function ProjectDetailsPage() {
     setError(null);
 
     try {
-      const [projectRes, areasRes, teamRes] = await Promise.all([
+      const [projectRes, areasRes, teamRes, boqRes, billsRes] = await Promise.all([
         fetch(`/api/projects/${id}`),
         fetch(`/api/projects/${id}/areas`),
         fetch(`/api/projects/${id}/team`),
+        fetch(`/api/projects/${id}/boq`),
+        fetch(`/api/projects/${id}/bills`),
       ]);
 
       const projectJson: ApiProject = await projectRes.json();
@@ -142,6 +167,23 @@ export default function ProjectDetailsPage() {
       } else {
         setTeam([]);
       }
+
+      // BOQ — find the active version for the summary card
+      const boqJson: ApiBOQ = await boqRes.json();
+      if (boqRes.ok && boqJson.success && boqJson.data) {
+        const active = boqJson.data.find((v) => v.isActive) ?? null;
+        setBoqActive(active);
+      } else {
+        setBoqActive(null);
+      }
+
+      // RA Bills
+      const billsJson: ApiBills = await billsRes.json();
+      if (billsRes.ok && billsJson.success && billsJson.data) {
+        setBills(billsJson.data);
+      } else {
+        setBills([]);
+      }
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to load project details"
@@ -158,11 +200,7 @@ export default function ProjectDetailsPage() {
     fetchData();
   }, [fetchData]);
 
-  const zonesCount = areas.length;
-  const subAreasCount = areas.reduce(
-    (sum, zone) => sum + (zone.children?.length ?? 0),
-    0
-  );
+  const areasCount = areas.length;
 
   const teamByRole = team.reduce(
     (acc, member) => {
@@ -257,6 +295,24 @@ export default function ProjectDetailsPage() {
               Manage Areas
             </Link>
             <Link
+              href={`/admin/projects/${id}/boq`}
+              className="bg-gray-100 hover:bg-gray-200 text-gray-800 text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+            >
+              Manage BOQ
+            </Link>
+            <Link
+              href={`/admin/projects/${id}/measurements`}
+              className="bg-gray-100 hover:bg-gray-200 text-gray-800 text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+            >
+              Measurements
+            </Link>
+            <Link
+              href={`/admin/projects/${id}/bills`}
+              className="bg-gray-100 hover:bg-gray-200 text-gray-800 text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+            >
+              RA Bills
+            </Link>
+            <Link
               href={`/admin/projects/${id}/team`}
               className="bg-green-600 hover:bg-green-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
             >
@@ -327,7 +383,7 @@ export default function ProjectDetailsPage() {
         </div>
 
         {/* Summary Cards Row */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Team Summary */}
           <div className="bg-white rounded-lg shadow-sm p-6">
             <div className="flex items-center justify-between mb-4">
@@ -378,12 +434,80 @@ export default function ProjectDetailsPage() {
             </div>
             <div className="space-y-2">
               <p className="text-2xl font-bold text-gray-900">
-                {zonesCount} zone{zonesCount !== 1 ? "s" : ""},{" "}
-                {subAreasCount} sub-area{subAreasCount !== 1 ? "s" : ""}
+                {areasCount} area{areasCount !== 1 ? "s" : ""}
               </p>
               <p className="text-sm text-gray-500">
-                Zones are top-level divisions; sub-areas belong to zones.
+                Areas are managed as a flat list for this project.
               </p>
+            </div>
+          </div>
+
+          {/* BOQ Summary */}
+          <div className="bg-white rounded-lg shadow-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-gray-800">BOQ Summary</h3>
+              <Link
+                href={`/admin/projects/${id}/boq`}
+                className="text-sm text-green-600 hover:text-green-700 font-medium"
+              >
+                Manage →
+              </Link>
+            </div>
+            <div className="space-y-2">
+              {boqActive ? (
+                <>
+                  <p className="text-2xl font-bold text-gray-900">
+                    {boqActive.itemCount} item{boqActive.itemCount !== 1 ? "s" : ""}
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    Version {boqActive.versionNumber} · {boqActive.fileName}
+                  </p>
+                  {boqActive.totalAmount != null && (
+                    <p className="text-sm font-medium text-green-700">
+                      Total: {formatCurrency(boqActive.totalAmount)}
+                    </p>
+                  )}
+                </>
+              ) : (
+                <p className="text-sm text-gray-500">No BOQ uploaded yet.</p>
+              )}
+            </div>
+          </div>
+
+          {/* RA Bills Summary */}
+          <div className="bg-white rounded-lg shadow-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-gray-800">RA Bills</h3>
+              <Link
+                href={`/admin/projects/${id}/bills`}
+                className="text-sm text-green-600 hover:text-green-700 font-medium"
+              >
+                Manage →
+              </Link>
+            </div>
+            <div className="space-y-2">
+              {bills.length > 0 ? (
+                <>
+                  <p className="text-2xl font-bold text-gray-900">
+                    {bills.length} bill{bills.length !== 1 ? "s" : ""}
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    {bills.filter((b) => b.latestAcceptedVersion).length} accepted
+                    {" · "}
+                    {bills.filter((b) => b.latestGeneratedVersion && !b.latestAcceptedVersion).length} generated-only
+                  </p>
+                  {(() => {
+                    const latest = bills[bills.length - 1];
+                    return (
+                      <p className="text-sm text-gray-500">
+                        Latest: {latest.bill_number}
+                      </p>
+                    );
+                  })()}
+                </>
+              ) : (
+                <p className="text-sm text-gray-500">No RA bills created yet.</p>
+              )}
             </div>
           </div>
         </div>
