@@ -1,8 +1,19 @@
-const CACHE_VERSION = "mbook-v1";
+// Why: bumped to v3 so clients drop old JPG-based branding assets and pick up the dedicated favicon/PWA icon set.
+const CACHE_VERSION = "mbook-v3";
 const SHELL_CACHE = `shell-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `runtime-${CACHE_VERSION}`;
 
-const SHELL_URLS = ["/", "/manifest.webmanifest", "/favicon.svg"];
+// Why: cache the manifest plus the browser/install icons together so offline launches never mix old and new branding.
+const SHELL_URLS = [
+  "/",
+  "/manifest.webmanifest",
+  "/logo.jpg",
+  "/apple-touch-icon.png",
+  "/favicon-32x32.png",
+  "/favicon-16x16.png",
+  "/icon-192.png",
+  "/icon-512.png",
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -50,6 +61,7 @@ self.addEventListener("fetch", (event) => {
     requestUrl.pathname.endsWith(".css") ||
     requestUrl.pathname.endsWith(".svg") ||
     requestUrl.pathname.endsWith(".png") ||
+    requestUrl.pathname.endsWith(".jpg") ||
     requestUrl.pathname.endsWith(".webmanifest")
   ) {
     event.respondWith(

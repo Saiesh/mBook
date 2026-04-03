@@ -2,21 +2,18 @@ import type { MetadataRoute } from 'next';
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    // Why: PWA installs should open the measurements hub (canonical capture entry) instead of removed /capture routes.
-    name: 'mBook Capture',
+    // Why: installed apps should use the product name users see in the browser so launchers and tabs stay in sync.
+    name: 'mBook',
     short_name: 'mBook',
-    description: 'Offline-first measurement capture for landscaping projects',
+    description: 'Measure, bill, and invoice landscaping projects from one mobile-friendly workspace',
     start_url: '/measurements',
     display: 'standalone',
-    background_color: '#f9fafb',
-    theme_color: '#16a34a',
+    background_color: '#f7f5ef',
+    theme_color: '#255a48',
     icons: [
-      {
-        // Why: favicon.svg exists in the app and avoids broken icon links during install checks.
-        src: '/favicon.svg',
-        sizes: 'any',
-        type: 'image/svg+xml',
-      },
+      // Why: dedicated square PNGs prevent install surfaces from stretching the wide wordmark artwork.
+      { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+      { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
     ],
   };
 }

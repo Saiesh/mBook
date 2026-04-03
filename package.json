@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "Mobile web application for landscaping measurement management",
   "private": true,
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",

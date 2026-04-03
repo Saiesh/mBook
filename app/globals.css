@@ -1,15 +1,17 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* Why: shared brand tokens keep the landing refresh consistent without scattering raw hex values across components. */
+  --brand-ivory: #f7f3ea;
+  --brand-ivory-strong: #ece4d6;
+  --brand-navy: #103240;
+  --brand-navy-muted: #355463;
+  --brand-teal: #1e6d69;
+  --brand-teal-soft: rgba(30, 109, 105, 0.14);
+  --brand-shadow: rgba(16, 50, 64, 0.12);
+  --brand-shadow-strong: rgba(16, 50, 64, 0.18);
+  --background: var(--brand-ivory);
+  --foreground: var(--brand-navy);
 }
 
 body {
@@ -18,8 +20,43 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+/* Why: landing hero fades in on first paint without a client boundary (no useEffect). */
+@keyframes landing-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @layer utilities {
   .text-balance {
     text-wrap: balance;
+  }
+
+  .animate-landing-fade-in {
+    animation: landing-fade-in 0.75s ease-out both;
+  }
+
+  /* Why: the landing page needs a reusable premium surface treatment for the hero without moving bespoke gradients into every component. */
+  .landing-surface {
+    background:
+      radial-gradient(circle at top, rgba(30, 109, 105, 0.16), transparent 34%),
+      radial-gradient(circle at bottom right, rgba(16, 50, 64, 0.08), transparent 28%),
+      linear-gradient(180deg, #fcfaf5 0%, var(--background) 100%);
+  }
+
+  /* Why: a shared panel treatment keeps CTA containers and badges visually consistent once the hero is restyled. */
+  .landing-panel {
+    background-color: rgba(255, 255, 255, 0.72);
+    border: 1px solid rgba(16, 50, 64, 0.08);
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.7) inset,
+      0 24px 60px -32px var(--brand-shadow-strong),
+      0 12px 30px -24px var(--brand-shadow);
+    backdrop-filter: blur(12px);
   }
 }
